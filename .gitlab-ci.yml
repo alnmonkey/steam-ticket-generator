@@ -1,0 +1,50 @@
+stages:
+  - build
+  - release
+
+variables:
+  CARGO_TERM_COLOR: always
+
+build:release:
+  stage: build
+  image: rust:latest
+  tags:
+    - windows
+  before_script:
+    - rustup install nightly
+    - rustup default nightly
+    - rustup target add x86_64-pc-windows-msvc
+  script:
+    - cargo build --release --target x86_64-pc-windows-msvc
+  artifacts:
+    name: steam-ticket-generator
+    paths:
+      - target/x86_64-pc-windows-msvc/release/*.exe
+    expire_in: 30 days
+  cache:
+    paths:
+      - target/
+      - .cargo/
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+create_release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - build:release
+  script:
+    - echo "Creating release for tag $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: Release $CI_COMMIT_TAG
+    description: Release binary for steam-ticket-generator
+    assets:
+      links:
+        - name: steam-ticket-generator.exe
+          url: $CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/target/x86_64-pc-windows-msvc/release/steam-ticket-generator.exe
+  only:
+    - tags
